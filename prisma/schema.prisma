@@ -1,31 +1,45 @@
 // This is your Prisma schema file for comprehensive family wealth tracking
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
+
 generator client {
   provider = "prisma-client-js"
 }
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
 // ============================================================================
 // USER & WORKSPACE MANAGEMENT
 // ============================================================================
+
+enum WorkspaceRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
   name      String?
   password  String?
+  role      WorkspaceRole @default(VIEWER)
   avatarUrl String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  
   // Workspace relationships
   workspaces     WorkspaceUser[]
   ownedWorkspaces Workspace[] @relation("WorkspaceOwner")
+  
   // Activity tracking
   activities     Activity[]
   
   @@map("users")
 }
+
 model Workspace {
   id          String   @id @default(cuid())
   name        String
@@ -33,11 +47,14 @@ model Workspace {
   currency    String   @default("USD")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  
   // Owner relationship
   ownerId String
   owner   User   @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  
   // Members
   members WorkspaceUser[]
+  
   // Financial entities
   accounts       Account[]
   assets         Asset[]
@@ -49,6 +66,7 @@ model Workspace {
   
   @@map("workspaces")
 }
+
 model WorkspaceUser {
   id          String          @id @default(cuid())
   workspaceId String
@@ -62,30 +80,43 @@ model WorkspaceUser {
   @@unique([workspaceId, userId])
   @@map("workspace_users")
 }
-enum WorkspaceRole {
-  OWNER
-  ADMIN
-  EDITOR
-  VIEWER
-}
+
 // ============================================================================
 // FINANCIAL ACCOUNTS
 // ============================================================================
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+  INVESTMENT
+  RETIREMENT
+  CREDIT_CARD
+  LOAN
+  MORTGAGE
+  OTHER
+}
+
+enum AccountProvider {
+  MANUAL
+  PLAID
+  YODLEE
+  OTHER
+}
+
 model Account {
-  id            String      @id @default(cuid())
-  name          String
-  type          AccountType
-  subtype       String?
-  institutionId String?
-  accountNumber String?
-  routingNumber String?
-  balance       Decimal     @default(0)
-  creditLimit   Decimal?
-  interestRate  Decimal?
-  maturityDate  DateTime?
-  isActive      Boolean     @default(true)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id              String          @id @default(cuid())
+  name            String
+  type            AccountType
+  provider        AccountProvider @default(MANUAL)
+  accountNumber   String?
+  routingNumber   String?
+  balance         Decimal         @default(0)
+  currency        String          @default("USD")
+  isActive        Boolean         @default(true)
+  lastSyncAt      DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   
   // Relationships
   workspaceId String
@@ -95,43 +126,57 @@ model Account {
   
   @@map("accounts")
 }
-enum AccountType {
-  CHECKING
-  SAVINGS
-  CREDIT_CARD
-  INVESTMENT
-  RETIREMENT_401K
-  RETIREMENT_IRA
-  RETIREMENT_ROTH_IRA
-  LOAN
-  MORTGAGE
-  STUDENT_LOAN
-  AUTO_LOAN
-  PERSONAL_LOAN
-  LINE_OF_CREDIT
-  CERTIFICATE_OF_DEPOSIT
-  MONEY_MARKET
-  BUSINESS
-  OTHER
-}
+
 // ============================================================================
 // TRANSACTIONS
 // ============================================================================
-model Transaction {
-  id          String          @id @default(cuid())
-  amount      Decimal
-  description String
-  category    String?
-  subcategory String?
-  type        TransactionType
-  date        DateTime
-  notes       String?
-  tags        String[]
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+enum TransactionCategory {
+  // Income categories
+  SALARY
+  FREELANCE
+  INVESTMENT_INCOME
+  RENTAL_INCOME
+  OTHER_INCOME
   
-  // External identifiers (for bank syncing)
-  externalId     String?
-  institutionId  String?
-  pending        Boolean  @default(false)
+  // Expense categories
+  HOUSING
+  TRANSPORTATION
+  FOOD
+  UTILITIES
+  INSURANCE
+  HEALTHCARE
+  ENTERTAINMENT
+  EDUCATION
+  PERSONAL_CARE
+  SHOPPING
+  TRAVEL
+  BUSINESS
+  CHARITY
+  OTHER_EXPENSE
+  
+  // Transfer
+  TRANSFER_IN
+  TRANSFER_OUT
+}
+
+model Transaction {
+  id          String              @id @default(cuid())
+  description String
+  amount      Decimal
+  date        DateTime
+  type        TransactionType
+  category    TransactionCategory
+  notes       String?
+  
+  // External transaction ID (for bank imports)
+  externalId String?
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -144,20 +189,29 @@ model Transaction {
   
   @@map("transactions")
 }
+
 // ============================================================================
-// INVESTMENTS & ASSETS
+// ASSETS & INVESTMENTS
 // ============================================================================
+
+enum AssetType {
+  REAL_ESTATE
+  VEHICLE
+  JEWELRY
+  ART
+  COLLECTIBLES
+  CRYPTOCURRENCY
+  OTHER
+}
+
 model Asset {
-  id            String     @id @default(cuid())
-  name          String
-  type          AssetType
-  category      String?
-  currentValue  Decimal
+  id           String    @id @default(cuid())
+  name         String
+  type         AssetType
+  currentValue Decimal
+  purchaseDate DateTime?
   purchasePrice Decimal?
-  purchaseDate  DateTime?
-  quantity      Decimal?
-  location      String?
-  description   String?
+  notes        String?
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -168,15 +222,14 @@ model Asset {
   
   @@map("assets")
 }
+
 model StockHolding {
-  id           String  @id @default(cuid())
-  symbol       String
-  companyName  String?
-  shares       Decimal
-  averageCost  Decimal
-  currentPrice Decimal?
-  sector       String?
-  exchange     String?
+  id            String  @id @default(cuid())
+  symbol        String
+  companyName   String?
+  shares        Decimal
+  averageCost   Decimal
+  currentPrice  Decimal?
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -187,52 +240,25 @@ model StockHolding {
   
   @@map("stock_holdings")
 }
-enum AssetType {
-  REAL_ESTATE
-  VEHICLE
-  JEWELRY
-  ART
-  COLLECTIBLES
-  CRYPTOCURRENCY
-  BUSINESS_OWNERSHIP
-  INTELLECTUAL_PROPERTY
-  PRECIOUS_METALS
-  FURNITURE
-  ELECTRONICS
-  OTHER
-}
-enum RealEstateType {
-  PRIMARY_RESIDENCE
-  INVESTMENT_PROPERTY
-  VACATION_HOME
-  COMMERCIAL
-  LAND
-  OTHER
-}
-enum TransactionType {
-  INCOME
-  EXPENSE
-  TRANSFER
-  INVESTMENT_BUY
-  INVESTMENT_SELL
-  DIVIDEND
-  INTEREST
-  WITHDRAWAL
-  DEPOSIT
-}
+
 // ============================================================================
-// BUDGETING & GOALS
+// BUDGETING
 // ============================================================================
+
+enum BudgetPeriod {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+  CUSTOM
+}
+
 model Budget {
   id          String       @id @default(cuid())
   name        String
-  category    String
-  subcategory String?
-  amount      Decimal
   period      BudgetPeriod
   startDate   DateTime
-  endDate     DateTime?
-  isActive    Boolean      @default(true)
+  endDate     DateTime
+  totalBudget Decimal
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -241,18 +267,55 @@ model Budget {
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   
+  categories BudgetCategory[]
+  
   @@map("budgets")
 }
+
+model BudgetCategory {
+  id            String              @id @default(cuid())
+  category      TransactionCategory
+  allocatedAmount Decimal
+  spentAmount   Decimal             @default(0)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relationships
+  budgetId String
+  budget   Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  
+  @@map("budget_categories")
+}
+
+// ============================================================================
+// GOALS
+// ============================================================================
+
+enum GoalType {
+  SAVINGS
+  DEBT_PAYOFF
+  INVESTMENT
+  NET_WORTH
+  OTHER
+}
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+  PAUSED
+  CANCELLED
+}
+
 model Goal {
-  id            String       @id @default(cuid())
-  name          String
-  description   String?
-  targetAmount  Decimal
-  currentAmount Decimal      @default(0)
-  category      GoalCategory
-  targetDate    DateTime?
-  status        GoalStatus   @default(ACTIVE)
-  priority      Int          @default(1)
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  type        GoalType
+  status      GoalStatus @default(ACTIVE)
+  targetAmount Decimal
+  currentAmount Decimal   @default(0)
+  targetDate  DateTime?
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -263,32 +326,11 @@ model Goal {
   
   @@map("goals")
 }
-enum GoalCategory {
-  EMERGENCY_FUND
-  RETIREMENT
-  HOME_PURCHASE
-  EDUCATION
-  VACATION
-  DEBT_PAYOFF
-  INVESTMENT
-  CAR_PURCHASE
-  OTHER
-}
-enum GoalStatus {
-  ACTIVE
-  COMPLETED
-  PAUSED
-  CANCELLED
-}
-enum BudgetPeriod {
-  MONTHLY
-  QUARTERLY
-  YEARLY
-  CUSTOM
-}
+
 // ============================================================================
 // NET WORTH TRACKING
 // ============================================================================
+
 model NetWorthSnapshot {
   id        String   @id @default(cuid())
   date      DateTime
@@ -305,9 +347,11 @@ model NetWorthSnapshot {
   
   @@map("net_worth_snapshots")
 }
+
 // ============================================================================
 // ACTIVITY TRACKING
 // ============================================================================
+
 model Activity {
   id          String       @id @default(cuid())
   type        ActivityType
@@ -324,6 +368,7 @@ model Activity {
   
   @@map("activities")
 }
+
 enum ActivityType {
   CREATE
   UPDATE
