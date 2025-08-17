@@ -1,0 +1,200 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Family relationship
+  familyId String?
+  family   Family? @relation(fields: [familyId], references: [id])
+
+  // Assets owned by this user
+  assets Asset[]
+
+  // Investment accounts
+  accounts Account[]
+
+  // Transactions made by this user
+  transactions Transaction[]
+
+  // Goals set by this user
+  goals Goal[]
+
+  @@map("users")
+}
+
+model Family {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Family members
+  members User[]
+
+  // Shared family assets
+  assets Asset[]
+
+  // Family financial goals
+  goals Goal[]
+
+  @@map("families")
+}
+
+model Asset {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  type        AssetType
+  value       Float
+  currency    String    @default("USD")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Owner relationships
+  userId   String?
+  user     User?   @relation(fields: [userId], references: [id])
+  familyId String?
+  family   Family? @relation(fields: [familyId], references: [id])
+
+  // Asset history for tracking value changes
+  history AssetHistory[]
+
+  @@map("assets")
+}
+
+model AssetHistory {
+  id        String   @id @default(cuid())
+  value     Float
+  date      DateTime @default(now())
+  notes     String?
+
+  assetId String
+  asset   Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@map("asset_history")
+}
+
+model Account {
+  id          String      @id @default(cuid())
+  name        String
+  type        AccountType
+  provider    String? // Bank name, brokerage, etc.
+  accountNumber String?
+  balance     Float       @default(0)
+  currency    String      @default("USD")
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  // Transactions in this account
+  transactions Transaction[]
+
+  @@map("accounts")
+}
+
+model Transaction {
+  id          String          @id @default(cuid())
+  amount      Float
+  description String?
+  category    String?
+  type        TransactionType
+  date        DateTime        @default(now())
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  accountId String?
+  account   Account? @relation(fields: [accountId], references: [id])
+
+  @@map("transactions")
+}
+
+model Goal {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  targetAmount Float
+  currentAmount Float     @default(0)
+  targetDate  DateTime?
+  category    GoalCategory
+  status      GoalStatus @default(ACTIVE)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Goal can be personal or family-wide
+  userId   String?
+  user     User?   @relation(fields: [userId], references: [id])
+  familyId String?
+  family   Family? @relation(fields: [familyId], references: [id])
+
+  @@map("goals")
+}
+
+enum AssetType {
+  REAL_ESTATE
+  STOCKS
+  BONDS
+  CRYPTO
+  CASH
+  COMMODITIES
+  COLLECTIBLES
+  BUSINESS
+  VEHICLE
+  OTHER
+}
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+  INVESTMENT
+  RETIREMENT_401K
+  RETIREMENT_IRA
+  CREDIT_CARD
+  LOAN
+  MORTGAGE
+  OTHER
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+  INVESTMENT
+  WITHDRAWAL
+}
+
+enum GoalCategory {
+  EMERGENCY_FUND
+  RETIREMENT
+  HOME_PURCHASE
+  EDUCATION
+  VACATION
+  DEBT_PAYOFF
+  INVESTMENT
+  OTHER
+}
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+  PAUSED
+  CANCELLED
+}
