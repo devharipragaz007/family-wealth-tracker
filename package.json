@@ -1,6 +1,4 @@
 {
-  "name": "family-wealth-tracker",
-  "version": "1.0.0",
   "description": "A comprehensive family wealth tracking application built with Next.js",
   "private": true,
   "scripts": {
@@ -8,12 +6,16 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.2",
     "@next-auth/prisma-adapter": "^1.0.7",
     "@next/font": "^13.5.4",
+    "@prisma/client": "^5.6.0",
     "@radix-ui/react-dialog": "^1.0.5",
     "@radix-ui/react-dropdown-menu": "^2.0.6",
     "@radix-ui/react-label": "^2.0.2",
@@ -53,6 +55,7 @@
     "autoprefixer": "^10.4.16",
     "eslint": "^8.51.0",
     "eslint-config-next": "^13.5.4",
-    "postcss": "^8.4.31"
+    "postcss": "^8.4.31",
+    "prisma": "^5.6.0"
   }
 }
