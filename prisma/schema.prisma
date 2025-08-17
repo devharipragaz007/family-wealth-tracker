@@ -1,4 +1,4 @@
-// This is your Prisma schema file,
+// This is your Prisma schema file for comprehensive family wealth tracking
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
@@ -10,155 +10,368 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ============================================================================
+// USER & WORKSPACE MANAGEMENT
+// ============================================================================
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
   name      String?
+  avatarUrl String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Family relationship
-  familyId String?
-  family   Family? @relation(fields: [familyId], references: [id])
+  // Workspace relationships
+  workspaces     WorkspaceUser[]
+  ownedWorkspaces Workspace[] @relation("WorkspaceOwner")
 
-  // Assets owned by this user
-  assets Asset[]
-
-  // Investment accounts
-  accounts Account[]
-
-  // Transactions made by this user
-  transactions Transaction[]
-
-  // Goals set by this user
-  goals Goal[]
-
+  // Activity tracking
+  activities     Activity[]
+  
   @@map("users")
 }
 
-model Family {
-  id        String   @id @default(cuid())
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  currency    String   @default("USD")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  // Family members
-  members User[]
+  // Owner relationship
+  ownerId String
+  owner   User   @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
 
-  // Shared family assets
-  assets Asset[]
+  // Members
+  members WorkspaceUser[]
 
-  // Family financial goals
-  goals Goal[]
+  // Financial entities
+  accounts       Account[]
+  assets         Asset[]
+  stockHoldings  StockHolding[]
+  mutualFundHoldings MutualFundHolding[]
+  bondHoldings   BondHolding[]
+  cryptoHoldings CryptoHolding[]
+  realEstateHoldings RealEstateHolding[]
+  liabilities    Liability[]
+  transactions   Transaction[]
+  goals          Goal[]
+  budgets        Budget[]
+  
+  // Activity tracking
+  activities     Activity[]
 
-  @@map("families")
+  @@map("workspaces")
 }
+
+model WorkspaceUser {
+  id          String   @id @default(cuid())
+  role        WorkspaceRole
+  joinedAt    DateTime @default(now())
+  
+  // Relationships
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@map("workspace_users")
+}
+
+// ============================================================================
+// FINANCIAL ACCOUNTS
+// ============================================================================
+
+model Account {
+  id            String      @id @default(cuid())
+  name          String
+  accountType   AccountType
+  accountNumber String?
+  institutionName String?
+  balance       Decimal     @default(0)
+  currency      String      @default("USD")
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  // Workspace relationship
+  workspaceId   String
+  workspace     Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  // Transactions
+  fromTransactions Transaction[] @relation("FromAccount")
+  toTransactions   Transaction[] @relation("ToAccount")
+  
+  // Holdings can be linked to accounts
+  stockHoldings      StockHolding[]
+  mutualFundHoldings MutualFundHolding[]
+  bondHoldings       BondHolding[]
+  cryptoHoldings     CryptoHolding[]
+  
+  @@map("accounts")
+}
+
+// ============================================================================
+// INVESTMENT HOLDINGS
+// ============================================================================
+
+model StockHolding {
+  id              String    @id @default(cuid())
+  symbol          String
+  companyName     String?
+  quantity        Decimal
+  averageCostBasis Decimal
+  currentPrice    Decimal?
+  marketValue     Decimal?
+  sector          String?
+  dividendYield   Decimal?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relationships
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  accountId   String?
+  account     Account?  @relation(fields: [accountId], references: [id])
+
+  @@map("stock_holdings")
+}
+
+model MutualFundHolding {
+  id              String    @id @default(cuid())
+  symbol          String
+  fundName        String?
+  shares          Decimal
+  averageCostBasis Decimal
+  currentPrice    Decimal?
+  marketValue     Decimal?
+  expenseRatio    Decimal?
+  fundType        String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relationships
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  accountId   String?
+  account     Account?  @relation(fields: [accountId], references: [id])
+
+  @@map("mutual_fund_holdings")
+}
+
+model BondHolding {
+  id              String    @id @default(cuid())
+  issuer          String
+  bondType        BondType
+  faceValue       Decimal
+  currentValue    Decimal?
+  couponRate      Decimal
+  maturityDate    DateTime
+  purchaseDate    DateTime
+  yieldToMaturity Decimal?
+  creditRating    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relationships
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  accountId   String?
+  account     Account?  @relation(fields: [accountId], references: [id])
+
+  @@map("bond_holdings")
+}
+
+model CryptoHolding {
+  id              String    @id @default(cuid())
+  symbol          String
+  cryptoName      String?
+  quantity        Decimal
+  averageCostBasis Decimal
+  currentPrice    Decimal?
+  marketValue     Decimal?
+  blockchain      String?
+  stakingRewards  Decimal   @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relationships
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  accountId   String?
+  account     Account?  @relation(fields: [accountId], references: [id])
+
+  @@map("crypto_holdings")
+}
+
+model RealEstateHolding {
+  id                String    @id @default(cuid())
+  propertyType      PropertyType
+  address           String
+  purchasePrice     Decimal
+  currentValue      Decimal?
+  purchaseDate      DateTime
+  mortgageBalance   Decimal   @default(0)
+  rentalIncome      Decimal   @default(0)
+  propertyTaxes     Decimal   @default(0)
+  maintenanceCosts  Decimal   @default(0)
+  squareFootage     Int?
+  bedrooms          Int?
+  bathrooms         Decimal?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relationships
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("real_estate_holdings")
+}
+
+// ============================================================================
+// OTHER ASSETS & LIABILITIES
+// ============================================================================
 
 model Asset {
   id          String    @id @default(cuid())
   name        String
+  assetType   AssetType
+  value       Decimal
   description String?
-  type        AssetType
-  value       Float
-  currency    String    @default("USD")
+  purchaseDate DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  // Owner relationships
-  userId   String?
-  user     User?   @relation(fields: [userId], references: [id])
-  familyId String?
-  family   Family? @relation(fields: [familyId], references: [id])
-
-  // Asset history for tracking value changes
-  history AssetHistory[]
+  // Relationships
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@map("assets")
 }
 
-model AssetHistory {
-  id        String   @id @default(cuid())
-  value     Float
-  date      DateTime @default(now())
-  notes     String?
+model Liability {
+  id            String        @id @default(cuid())
+  name          String
+  liabilityType LiabilityType
+  balance       Decimal
+  interestRate  Decimal?
+  minimumPayment Decimal?
+  dueDate       DateTime?
+  description   String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
-  assetId String
-  asset   Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  // Relationships
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@map("asset_history")
+  @@map("liabilities")
 }
 
-model Account {
-  id          String      @id @default(cuid())
-  name        String
-  type        AccountType
-  provider    String? // Bank name, brokerage, etc.
-  accountNumber String?
-  balance     Float       @default(0)
-  currency    String      @default("USD")
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-
-  // Transactions in this account
-  transactions Transaction[]
-
-  @@map("accounts")
-}
+// ============================================================================
+// TRANSACTIONS
+// ============================================================================
 
 model Transaction {
-  id          String          @id @default(cuid())
-  amount      Float
-  description String?
-  category    String?
-  type        TransactionType
-  date        DateTime        @default(now())
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id              String          @id @default(cuid())
+  amount          Decimal
+  description     String?
+  transactionType TransactionType
+  category        String?
+  transactionDate DateTime
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-
-  accountId String?
-  account   Account? @relation(fields: [accountId], references: [id])
+  // Relationships
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  // Account relationships (for transfers)
+  fromAccountId String?
+  fromAccount   Account? @relation("FromAccount", fields: [fromAccountId], references: [id])
+  toAccountId   String?
+  toAccount     Account? @relation("ToAccount", fields: [toAccountId], references: [id])
 
   @@map("transactions")
 }
 
-model Goal {
-  id          String     @id @default(cuid())
-  title       String
-  description String?
-  targetAmount Float
-  currentAmount Float     @default(0)
-  targetDate  DateTime?
-  category    GoalCategory
-  status      GoalStatus @default(ACTIVE)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+// ============================================================================
+// GOALS & BUDGETS
+// ============================================================================
 
-  // Goal can be personal or family-wide
-  userId   String?
-  user     User?   @relation(fields: [userId], references: [id])
-  familyId String?
-  family   Family? @relation(fields: [familyId], references: [id])
+model Goal {
+  id            String       @id @default(cuid())
+  title         String
+  description   String?
+  targetAmount  Decimal
+  currentAmount Decimal      @default(0)
+  targetDate    DateTime?
+  category      GoalCategory
+  status        GoalStatus   @default(ACTIVE)
+  priority      Int          @default(1)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  // Relationships
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@map("goals")
 }
 
-enum AssetType {
-  REAL_ESTATE
-  STOCKS
-  BONDS
-  CRYPTO
-  CASH
-  COMMODITIES
-  COLLECTIBLES
-  BUSINESS
-  VEHICLE
-  OTHER
+model Budget {
+  id          String   @id @default(cuid())
+  name        String
+  category    String
+  amount      Decimal
+  period      BudgetPeriod
+  startDate   DateTime
+  endDate     DateTime?
+  spent       Decimal  @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("budgets")
+}
+
+// ============================================================================
+// ACTIVITY LOGGING
+// ============================================================================
+
+model Activity {
+  id          String       @id @default(cuid())
+  action      ActivityType
+  entityType  String       // "stock_holding", "transaction", "goal", etc.
+  entityId    String
+  description String?
+  metadata    Json?        // Additional data about the activity
+  createdAt   DateTime     @default(now())
+
+  // Relationships
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("activities")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
 }
 
 enum AccountType {
@@ -167,9 +380,48 @@ enum AccountType {
   INVESTMENT
   RETIREMENT_401K
   RETIREMENT_IRA
+  ROTH_IRA
   CREDIT_CARD
   LOAN
   MORTGAGE
+  OTHER
+}
+
+enum AssetType {
+  VEHICLE
+  JEWELRY
+  ART
+  COLLECTIBLES
+  CASH
+  PRECIOUS_METALS
+  BUSINESS_EQUITY
+  OTHER
+}
+
+enum LiabilityType {
+  CREDIT_CARD
+  STUDENT_LOAN
+  AUTO_LOAN
+  MORTGAGE
+  PERSONAL_LOAN
+  BUSINESS_LOAN
+  OTHER
+}
+
+enum BondType {
+  GOVERNMENT
+  CORPORATE
+  MUNICIPAL
+  TREASURY
+  OTHER
+}
+
+enum PropertyType {
+  PRIMARY_RESIDENCE
+  INVESTMENT_PROPERTY
+  VACATION_HOME
+  COMMERCIAL
+  LAND
   OTHER
 }
 
@@ -177,8 +429,12 @@ enum TransactionType {
   INCOME
   EXPENSE
   TRANSFER
-  INVESTMENT
+  INVESTMENT_BUY
+  INVESTMENT_SELL
+  DIVIDEND
+  INTEREST
   WITHDRAWAL
+  DEPOSIT
 }
 
 enum GoalCategory {
@@ -189,6 +445,7 @@ enum GoalCategory {
   VACATION
   DEBT_PAYOFF
   INVESTMENT
+  CAR_PURCHASE
   OTHER
 }
 
@@ -197,4 +454,23 @@ enum GoalStatus {
   COMPLETED
   PAUSED
   CANCELLED
+}
+
+enum BudgetPeriod {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+  CUSTOM
+}
+
+enum ActivityType {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  INVITE_USER
+  REMOVE_USER
+  SYNC_DATA
+  EXPORT_DATA
 }
