@@ -1,0 +1,70 @@
+{
+  "name": "family-wealth-tracker",
+  "version": "1.0.0",
+  "description": "A comprehensive family wealth tracking application built with Next.js",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@next/font": "^13.5.4",
+    "@types/bcryptjs": "^2.4.4",
+    "@types/jsonwebtoken": "^9.0.3",
+    "@types/node": "^20.8.4",
+    "@types/react": "^18.2.27",
+    "@types/react-dom": "^18.2.12",
+    "bcryptjs": "^2.4.3",
+    "chart.js": "^4.4.0",
+    "chartjs-adapter-date-fns": "^3.0.0",
+    "date-fns": "^2.30.0",
+    "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^0.287.0",
+    "mongoose": "^7.6.3",
+    "next": "^13.5.4",
+    "react": "^18.2.0",
+    "react-chartjs-2": "^5.2.0",
+    "react-dom": "^18.2.0",
+    "react-hook-form": "^7.47.0",
+    "recharts": "^2.8.0",
+    "tailwindcss": "^3.3.5",
+    "typescript": "^5.2.2"
+  },
+  "devDependencies": {
+    "@types/eslint": "^8.44.4",
+    "autoprefixer": "^10.4.16",
+    "eslint": "^8.51.0",
+    "eslint-config-next": "^13.5.4",
+    "postcss": "^8.4.31",
+    "prettier": "^3.0.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "keywords": [
+    "family",
+    "wealth",
+    "tracker",
+    "finance",
+    "nextjs",
+    "react",
+    "typescript",
+    "portfolio",
+    "investment",
+    "dashboard"
+  ],
+  "author": "devharipragaz007",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/devharipragaz007/family-wealth-tracker.git"
+  },
+  "bugs": {
+    "url": "https://github.com/devharipragaz007/family-wealth-tracker/issues"
+  },
+  "homepage": "https://github.com/devharipragaz007/family-wealth-tracker#readme"
+}
