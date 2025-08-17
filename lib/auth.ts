@@ -14,7 +14,7 @@ declare module "next-auth" {
       image?: string
     }
   }
-
+  
   interface User {
     id: string
     email: string
@@ -39,25 +39,22 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          return null
-        }
-
-        // TODO: Replace with your actual user authentication logic
-        // This is a placeholder - implement your database lookup here
         try {
-          // Example authentication logic - replace with actual implementation
-          const user = {
-            id: "1",
-            email: credentials.email,
-            name: "Demo User",
-          }
-
-          if (user) {
-            return {
-              id: user.id,
-              email: user.email,
-              name: user.name,
+          // This is a demo implementation
+          // In production, validate against your database
+          if (credentials?.email === "demo@example.com" && credentials?.password === "password") {
+            const user = {
+              id: "1",
+              email: credentials.email,
+              name: "Demo User",
+            }
+            
+            if (user) {
+              return {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+              }
             }
           }
           return null
@@ -74,7 +71,6 @@ export const authOptions: NextAuthOptions = {
   ],
   pages: {
     signIn: "/auth/signin",
-    signUp: "/auth/signup",
   },
   session: {
     strategy: "jwt",
