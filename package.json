@@ -11,6 +11,8 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@hookform/resolvers": "^3.3.2",
+    "@next-auth/prisma-adapter": "^1.0.7",
     "@next/font": "^13.5.4",
     "@types/bcryptjs": "^2.4.4",
     "@types/jsonwebtoken": "^9.0.3",
@@ -25,6 +27,7 @@
     "lucide-react": "^0.287.0",
     "mongoose": "^7.6.3",
     "next": "^13.5.4",
+    "next-auth": "^4.24.5",
     "react": "^18.2.0",
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18.2.0",
@@ -32,40 +35,14 @@
     "recharts": "^2.8.0",
     "tailwindcss": "^3.3.5",
     "tailwindcss-animate": "^1.0.7",
-    "typescript": "^5.2.2"
+    "typescript": "^5.2.2",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
-    "@types/eslint": "^8.44.4",
+    "@types/bcryptjs": "^2.4.4",
     "autoprefixer": "^10.4.16",
     "eslint": "^8.51.0",
     "eslint-config-next": "^13.5.4",
-    "postcss": "^8.4.31",
-    "prettier": "^3.0.3"
-  },
-  "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=9.0.0"
-  },
-  "keywords": [
-    "family",
-    "wealth",
-    "tracker",
-    "finance",
-    "nextjs",
-    "react",
-    "typescript",
-    "portfolio",
-    "investment",
-    "dashboard"
-  ],
-  "author": "devharipragaz007",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/devharipragaz007/family-wealth-tracker.git"
-  },
-  "bugs": {
-    "url": "https://github.com/devharipragaz007/family-wealth-tracker/issues"
-  },
-  "homepage": "https://github.com/devharipragaz007/family-wealth-tracker#readme"
+    "postcss": "^8.4.31"
+  }
 }
