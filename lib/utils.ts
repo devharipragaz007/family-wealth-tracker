@@ -2,31 +2,25 @@ import { clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 
 /**
- * Utility function for merging className values using clsx and tailwind-merge
- * This function safely combines multiple class names for UI components
+ * Utility function to merge className strings using clsx and tailwind-merge
+ * @param inputs - Class name strings or conditional classes
+ * @returns Merged class name string
  */
-export function cn(...inputs: any[]) {
-  return twMerge(clsx(...inputs))
+export function cn(...inputs: Parameters<typeof clsx>) {
+  return twMerge(clsx(inputs))
 }
 
 /**
- * Safe division utility to handle division by zero
- * @param numerator - The dividend
- * @param denominator - The divisor
- * @param fallback - Value to return if division by zero
- * @returns Result of division or fallback value
+ * Safe division utility to prevent division by zero
+ * @param dividend - Number to divide
+ * @param divisor - Number to divide by
+ * @param fallback - Fallback value if divisor is zero
+ * @returns Result of division or fallback
  */
-export function safeDivide(numerator: number, denominator: number, fallback: number = 0): number {
-  if (denominator === 0) return fallback;
-  return numerator / denominator;
+export function safeDivide(dividend: number, divisor: number, fallback: number = 0): number {
+  return divisor === 0 ? fallback : dividend / divisor
 }
 
-/**
- * Format a number as a percentage with specified decimal places
- * @param value - The decimal value to format (0.5 = 50%)
- * @param decimals - Number of decimal places to show
- * @returns Formatted percentage string
- */
 export function formatPercentage(value: number, decimals: number = 2): string {
   return (value * 100).toFixed(decimals) + '%';
 }
