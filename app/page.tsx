@@ -23,7 +23,7 @@ import {
   Activity
 } from 'lucide-react';
 
-export default function Home() {
+export default function DashboardHome() {
   // Sample data - replace with actual data from your backend
   const kpiData = {
     netWorth: 235000,
