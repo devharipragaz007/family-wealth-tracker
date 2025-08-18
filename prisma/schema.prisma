@@ -20,12 +20,18 @@ enum WorkspaceRole {
   VIEWER
 }
 
+enum UserRole {
+  ADMIN
+  USER
+  VIEWER
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
   name      String?
   password  String?
-  role      WorkspaceRole @default(VIEWER)
+  role      UserRole @default(USER)
   avatarUrl String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -34,8 +40,13 @@ model User {
   workspaces     WorkspaceUser[]
   ownedWorkspaces Workspace[] @relation("WorkspaceOwner")
   
-  // Activity tracking
-  activities     Activity[]
+  // Financial relationships
+  accounts      Account[]
+  budgets       Budget[]
+  goals         Goal[]
+  transactions  Transaction[]
+  reports       Report[]
+  notifications Notification[]
   
   @@map("users")
 }
@@ -44,92 +55,52 @@ model Workspace {
   id          String   @id @default(cuid())
   name        String
   description String?
-  currency    String   @default("USD")
+  ownerId     String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
-  // Owner relationship
-  ownerId String
-  owner   User   @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  owner User @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   
-  // Members
-  members WorkspaceUser[]
-  
-  // Financial entities
-  accounts       Account[]
-  assets         Asset[]
-  stockHoldings  StockHolding[]
-  budgets        Budget[]
-  transactions   Transaction[]
-  goals          Goal[]
-  netWorthSnapshots NetWorthSnapshot[]
+  // Relationships
+  members      WorkspaceUser[]
+  accounts     Account[]
+  budgets      Budget[]
+  goals        Goal[]
+  transactions Transaction[]
+  categories   Category[]
+  reports      Report[]
   
   @@map("workspaces")
 }
 
 model WorkspaceUser {
-  id          String          @id @default(cuid())
-  workspaceId String
+  id          String        @id @default(cuid())
   userId      String
-  role        WorkspaceRole   @default(VIEWER)
-  joinedAt    DateTime        @default(now())
+  workspaceId String
+  role        WorkspaceRole @default(VIEWER)
+  joinedAt    DateTime      @default(now())
   
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   
-  @@unique([workspaceId, userId])
+  @@unique([userId, workspaceId])
   @@map("workspace_users")
 }
 
 // ============================================================================
-// FINANCIAL ACCOUNTS
+// FINANCIAL ACCOUNTS & TRANSACTIONS
 // ============================================================================
 
 enum AccountType {
   CHECKING
   SAVINGS
+  CREDIT_CARD
   INVESTMENT
   RETIREMENT
-  CREDIT_CARD
   LOAN
   MORTGAGE
   OTHER
 }
-
-enum AccountProvider {
-  MANUAL
-  PLAID
-  YODLEE
-  OTHER
-}
-
-model Account {
-  id              String          @id @default(cuid())
-  name            String
-  type            AccountType
-  provider        AccountProvider @default(MANUAL)
-  accountNumber   String?
-  routingNumber   String?
-  balance         Decimal         @default(0)
-  currency        String          @default("USD")
-  isActive        Boolean         @default(true)
-  lastSyncAt      DateTime?
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  // Relationships
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  
-  transactions Transaction[]
-  
-  @@map("accounts")
-}
-
-// ============================================================================
-// TRANSACTIONS
-// ============================================================================
 
 enum TransactionType {
   INCOME
@@ -137,108 +108,76 @@ enum TransactionType {
   TRANSFER
 }
 
-enum TransactionCategory {
-  // Income categories
-  SALARY
-  FREELANCE
-  INVESTMENT_INCOME
-  RENTAL_INCOME
-  OTHER_INCOME
+model Account {
+  id          String      @id @default(cuid())
+  name        String
+  type        AccountType
+  balance     Decimal     @default(0) @db.Decimal(12, 2)
+  currency    String      @default("USD")
+  description String?
+  isActive    Boolean     @default(true)
   
-  // Expense categories
-  HOUSING
-  TRANSPORTATION
-  FOOD
-  UTILITIES
-  INSURANCE
-  HEALTHCARE
-  ENTERTAINMENT
-  EDUCATION
-  PERSONAL_CARE
-  SHOPPING
-  TRAVEL
-  BUSINESS
-  CHARITY
-  OTHER_EXPENSE
+  userId      String
+  workspaceId String?
   
-  // Transfer
-  TRANSFER_IN
-  TRANSFER_OUT
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace    Workspace?    @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  
+  // Relationships
+  transactions Transaction[]
+  investments  Investment[]
+  
+  @@map("accounts")
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  color       String?  // Hex color code
+  icon        String?
+  parentId    String?  // For subcategories
+  
+  workspaceId String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  parent    Category?  @relation("CategoryParent", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryParent")
+  
+  // Relationships
+  transactions Transaction[]
+  budgetItems  BudgetItem[]
+  
+  @@map("categories")
 }
 
 model Transaction {
-  id          String              @id @default(cuid())
-  description String
-  amount      Decimal
-  date        DateTime
+  id          String          @id @default(cuid())
+  amount      Decimal         @db.Decimal(12, 2)
   type        TransactionType
-  category    TransactionCategory
-  notes       String?
+  description String?
+  date        DateTime
   
-  // External transaction ID (for bank imports)
-  externalId String?
+  accountId   String
+  categoryId  String?
+  userId      String
+  workspaceId String?
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
-  // Relationships
-  accountId   String
-  account     Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account   Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  category  Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
   
   @@map("transactions")
-}
-
-// ============================================================================
-// ASSETS & INVESTMENTS
-// ============================================================================
-
-enum AssetType {
-  REAL_ESTATE
-  VEHICLE
-  JEWELRY
-  ART
-  COLLECTIBLES
-  CRYPTOCURRENCY
-  OTHER
-}
-
-model Asset {
-  id           String    @id @default(cuid())
-  name         String
-  type         AssetType
-  currentValue Decimal
-  purchaseDate DateTime?
-  purchasePrice Decimal?
-  notes        String?
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  // Relationships
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  
-  @@map("assets")
-}
-
-model StockHolding {
-  id            String  @id @default(cuid())
-  symbol        String
-  companyName   String?
-  shares        Decimal
-  averageCost   Decimal
-  currentPrice  Decimal?
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  // Relationships
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  
-  @@map("stock_holdings")
 }
 
 // ============================================================================
@@ -246,59 +185,64 @@ model StockHolding {
 // ============================================================================
 
 enum BudgetPeriod {
+  WEEKLY
   MONTHLY
   QUARTERLY
   YEARLY
-  CUSTOM
+}
+
+enum BudgetStatus {
+  ACTIVE
+  INACTIVE
+  COMPLETED
 }
 
 model Budget {
   id          String       @id @default(cuid())
   name        String
+  description String?
   period      BudgetPeriod
+  status      BudgetStatus @default(ACTIVE)
   startDate   DateTime
   endDate     DateTime
-  totalBudget Decimal
+  totalAmount Decimal      @db.Decimal(12, 2)
+  
+  userId      String
+  workspaceId String?
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
-  // Relationships
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace?  @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
   
-  categories BudgetCategory[]
+  // Relationships
+  items BudgetItem[]
   
   @@map("budgets")
 }
 
-model BudgetCategory {
-  id            String              @id @default(cuid())
-  category      TransactionCategory
-  allocatedAmount Decimal
-  spentAmount   Decimal             @default(0)
+model BudgetItem {
+  id           String  @id @default(cuid())
+  name         String
+  budgetedAmount Decimal @db.Decimal(12, 2)
+  spentAmount    Decimal @default(0) @db.Decimal(12, 2)
+  
+  budgetId   String
+  categoryId String?
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
-  // Relationships
-  budgetId String
-  budget   Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  budget   Budget    @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   
-  @@map("budget_categories")
+  @@map("budget_items")
 }
 
 // ============================================================================
-// GOALS
+// GOALS & PLANNING
 // ============================================================================
-
-enum GoalType {
-  SAVINGS
-  DEBT_PAYOFF
-  INVESTMENT
-  NET_WORTH
-  OTHER
-}
 
 enum GoalStatus {
   ACTIVE
@@ -307,76 +251,139 @@ enum GoalStatus {
   CANCELLED
 }
 
+enum GoalType {
+  SAVINGS
+  DEBT_PAYOFF
+  INVESTMENT
+  EMERGENCY_FUND
+  OTHER
+}
+
 model Goal {
-  id          String     @id @default(cuid())
-  title       String
-  description String?
-  type        GoalType
-  status      GoalStatus @default(ACTIVE)
-  targetAmount Decimal
-  currentAmount Decimal   @default(0)
-  targetDate  DateTime?
+  id            String     @id @default(cuid())
+  name          String
+  description   String?
+  type          GoalType
+  status        GoalStatus @default(ACTIVE)
+  targetAmount  Decimal    @db.Decimal(12, 2)
+  currentAmount Decimal    @default(0) @db.Decimal(12, 2)
+  targetDate    DateTime?
+  
+  userId      String
+  workspaceId String?
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  
   // Relationships
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  milestones GoalMilestone[]
   
   @@map("goals")
 }
 
-// ============================================================================
-// NET WORTH TRACKING
-// ============================================================================
-
-model NetWorthSnapshot {
-  id        String   @id @default(cuid())
-  date      DateTime
-  netWorth  Decimal
-  assets    Decimal
-  liabilities Decimal
-  notes     String?
+model GoalMilestone {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  targetAmount Decimal @db.Decimal(12, 2)
+  targetDate  DateTime
+  isCompleted Boolean  @default(false)
+  completedAt DateTime?
+  
+  goalId String
   
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   
-  // Relationships
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  goal Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
   
-  @@map("net_worth_snapshots")
+  @@map("goal_milestones")
 }
 
 // ============================================================================
-// ACTIVITY TRACKING
+// INVESTMENTS & ASSETS
 // ============================================================================
 
-model Activity {
-  id          String       @id @default(cuid())
-  type        ActivityType
-  description String
-  metadata    Json?
-  ipAddress   String?
-  userAgent   String?
+enum AssetType {
+  STOCK
+  BOND
+  MUTUAL_FUND
+  ETF
+  CRYPTOCURRENCY
+  REAL_ESTATE
+  COMMODITY
+  OTHER
+}
+
+model Investment {
+  id          String    @id @default(cuid())
+  symbol      String
+  name        String
+  type        AssetType
+  quantity    Decimal   @db.Decimal(12, 6)
+  avgCost     Decimal   @db.Decimal(12, 2)
+  currentPrice Decimal? @db.Decimal(12, 2)
+  
+  accountId String
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@map("investments")
+}
+
+// ============================================================================
+// REPORTS & ANALYTICS
+// ============================================================================
+
+model Report {
+  id          String   @id @default(cuid())
+  name        String
+  type        String   // e.g., 'income_expense', 'net_worth', 'budget_analysis'
+  parameters  Json?    // Store report configuration
+  generatedAt DateTime
+  
+  userId      String
+  workspaceId String?
   
   createdAt DateTime @default(now())
   
-  // Relationships
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  
+  @@map("reports")
+}
+
+// ============================================================================
+// NOTIFICATIONS & ALERTS
+// ============================================================================
+
+enum NotificationType {
+  BUDGET_EXCEEDED
+  GOAL_MILESTONE
+  LOW_BALANCE
+  BILL_DUE
+  INVESTMENT_ALERT
+  SYSTEM
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  title     String
+  message   String
+  type      NotificationType
+  isRead    Boolean          @default(false)
+  
   userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  @@map("activities")
-}
-
-enum ActivityType {
-  CREATE
-  UPDATE
-  DELETE
-  LOGIN
-  LOGOUT
-  INVITE_USER
-  REMOVE_USER
-  SYNC_DATA
-  EXPORT_DATA
+  createdAt DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("notifications")
 }
