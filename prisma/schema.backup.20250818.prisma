@@ -27,33 +27,15 @@ enum UserRole {
 }
 
 enum AssetType {
-  // Core Investments
-  INDIAN_STOCK
+  STOCK
   US_STOCK
   MUTUAL_FUND
-  SIP
-  
-  // Alternative Investments
+  CRYPTO
+  FIXED_DEPOSIT
+  RECURRING_DEPOSIT
   REAL_ESTATE
   GOLD
   SILVER
-  CRYPTO
-  IPO
-  
-  // Traditional Savings
-  FIXED_DEPOSIT
-  RECURRING_DEPOSIT
-  CHIT_FUND
-  
-  // Other
-  BONDS
-  DEBENTURES
-  NPS
-  PPF
-  EPF
-  SSY
-  NSC
-  ULIP
   OTHER
 }
 
@@ -84,22 +66,6 @@ enum TransactionType {
   FEE
   TAX
   REBALANCE
-  DEPOSIT
-  WITHDRAWAL
-  CONVERSION
-  REWARD
-  REINVEST
-  EXPENSE
-  INCOME
-  DIVIDEND_REINVEST
-  CAPITAL_GAIN
-  DIVIDEND_TAX
-  TAX_REFUND
-  INTEREST_INCOME
-  INTEREST_EXPENSE
-  FEE_REBATE
-  OTHER_INCOME
-  OTHER_EXPENSE
 }
 
 enum AccountType {
@@ -117,41 +83,14 @@ enum AccountType {
 }
 
 enum InvestmentType {
-  // Mutual Fund Categories
   EQUITY
   DEBT
   HYBRID
   INDEX
   ETF
-  GOLD_ETF
-  INTERNATIONAL
-  SECTORAL
-  TAX_SAVING_ELSS
-  ARBITRAGE
-  BALANCED
-  
-  // Fixed Income
-  CORPORATE_BONDS
-  GOVERNMENT_SECURITIES
-  
-  // Alternative Investments
-  REAL_ESTATE
   GOLD
-  SILVER
+  REAL_ESTATE
   CRYPTO
-  
-  // Retirement
-  NPS
-  PPF
-  EPF
-  
-  // Insurance
-  ULIP
-  
-  // Others
-  IPO
-  BONDS
-  DEBENTURES
   OTHER
 }
 
@@ -216,337 +155,6 @@ enum CompoundingFrequency {
   HALF_YEARLY
   YEARLY
   MATURITY
-}
-
-// ============================================================================
-// COMMON INTERFACES
-// ============================================================================
-
-model BaseHolding {
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId   String    @db.Uuid
-  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  name          String
-  assetType     AssetType
-  investmentType InvestmentType
-  notes         String?
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
-  // Common fields for all holdings
-  currentValue  Decimal   @default(0) @db.Decimal(19, 4)
-  investedAmount Decimal  @default(0) @db.Decimal(19, 4)
-  profitLoss    Decimal   @default(0) @db.Decimal(19, 4)
-  profitLossPct Decimal   @default(0) @db.Decimal(10, 2)
-  currency      String    @default("INR")
-  
-  // Relations
-  transactions  Transaction[]
-  
-  @@map("holdings")
-  @@index([workspaceId])
-  @@index([assetType])
-  @@index([investmentType])
-}
-
-// ============================================================================
-// SPECIFIC INVESTMENT MODELS
-// ============================================================================
-
-model StockHolding {
-  // Base fields
-  id          String  @id @db.Uuid
-  base        BaseHolding @relation(fields: [id], references: [id], onDelete: Cascade)
-  
-  // Stock specific fields
-  symbol            String
-  isin              String?
-  exchange          String
-  sector            String?
-  industry          String?
-  country           String  @default("IN")
-  
-  // Current position
-  quantity          Decimal @default(0) @db.Decimal(19, 4)
-  averageBuyPrice   Decimal @default(0) @db.Decimal(19, 4)
-  currentPrice      Decimal @default(0) @db.Decimal(19, 4)
-  
-  // Performance metrics
-  dayChange         Decimal @default(0) @db.Decimal(10, 2)
-  dayChangePercent  Decimal @default(0) @db.Decimal(10, 2)
-  
-  @@map("stock_holdings")
-  @@index([symbol, exchange])
-  @@index([sector])
-}
-
-model MutualFundHolding {
-  // Base fields
-  id          String  @id @db.Uuid
-  base        BaseHolding @relation(fields: [id], references: [id], onDelete: Cascade)
-  
-  // MF specific fields
-  amfiCode          String?
-  isin              String
-  fundHouse         String
-  category          String
-  subCategory       String?
-  benchmark         String?
-  nav               Decimal @default(0) @db.Decimal(19, 4)
-  lastNavDate       DateTime?
-  
-  // SIP details
-  isSipActive       Boolean @default(false)
-  sipAmount         Decimal @default(0) @db.Decimal(19, 2)
-  sipDay            Int?
-  sipStartDate      DateTime?
-  
-  @@map("mutual_fund_holdings")
-  @@index([isin])
-  @@index([fundHouse])
-  @@index([category])
-}
-
-model FixedDeposit {
-  // Base fields
-  id          String  @id @db.Uuid
-  base        BaseHolding @relation(fields: [id], references: [id], onDelete: Cascade)
-  
-  // FD specific fields
-  accountNumber     String
-  bankName          String
-  branch            String?
-  startDate         DateTime
-  maturityDate      DateTime
-  principal         Decimal @db.Decimal(19, 2)
-  interestRate      Decimal @db.Decimal(5, 2)
-  compoundingFrequency CompoundingFrequency
-  interestPayoutFrequency Frequency
-  taxDeductedAtSource Boolean @default(false)
-  
-  // Maturity details
-  maturityAmount    Decimal @db.Decimal(19, 2)
-  interestEarned    Decimal @db.Decimal(19, 2)
-  
-  @@map("fixed_deposits")
-}
-
-model RealEstate {
-  // Base fields
-  id          String  @id @db.Uuid
-  base        BaseHolding @relation(fields: [id], references: [id], onDelete: Cascade)
-  
-  // Property details
-  propertyType       RealEstateType
-  address            String
-  city               String
-  state              String
-  country            String @default("India")
-  pinCode            String
-  area               Decimal @db.Decimal(10, 2) // in sq.ft
-  purchaseDate       DateTime
-  purchasePrice      Decimal @db.Decimal(19, 2)
-  currentValue       Decimal @db.Decimal(19, 2)
-  
-  // Ownership
-  ownershipType      String // Freehold, Leasehold, etc.
-  coOwners           String? // JSON array of co-owners
-  
-  // Rental details if applicable
-  isRented           Boolean @default(false)
-  monthlyRent        Decimal? @db.Decimal(19, 2)
-  maintenanceCharges Decimal? @db.Decimal(10, 2)
-  
-  // Loan details if applicable
-  hasLoan            Boolean @default(false)
-  loanAmount         Decimal? @db.Decimal(19, 2)
-  emi                Decimal? @db.Decimal(10, 2)
-  
-  // Documents
-  registrationDoc    String? // URL to document
-  taxReceipts        String? // URL to receipts
-  
-  @@map("real_estate")
-}
-
-model GoldSilverHolding {
-  // Base fields
-  id          String  @id @db.Uuid
-  base        BaseHolding @relation(fields: [id], references: [id], onDelete: Cascade)
-  
-  // Metal details
-  metalType           MetalType
-  metalForm           MetalForm
-  purity              Decimal @db.Decimal(5, 3) // e.g., 0.999 for 99.9% pure
-  weight              Decimal @db.Decimal(10, 4) // in grams
-  
-  // Purchase details
-  purchaseDate        DateTime
-  purchasePricePerGram Decimal @db.Decimal(19, 2)
-  currentPricePerGram Decimal @db.Decimal(19, 2)
-  
-  // Storage details
-  storageLocation     String? // e.g., Bank Locker, Home, Demat
-  lockerDetails       String? // If stored in locker
-  
-  // For digital gold/silver
-  isDigital           Boolean @default(false)
-  platform            String? // e.g., Augmont, MMTC-PAMP
-  
-  @@map("precious_metals")
-}
-
-model CryptocurrencyHolding {
-  // Base fields
-  id          String  @id @db.Uuid
-  base        BaseHolding @relation(fields: [id], references: [id], onDelete: Cascade)
-  
-  // Crypto details
-  symbol              String
-  name                String
-  blockchain          String?
-  
-  // Holdings
-  quantity            Decimal @db.Decimal(36, 18)
-  averageBuyPrice     Decimal @db.Decimal(36, 18)
-  currentPrice        Decimal @db.Decimal(36, 18)
-  
-  // Wallet/Exchange details
-  platform            String  // e.g., Binance, WazirX, Hardware Wallet
-  walletAddress       String?
-  isStaked            Boolean @default(false)
-  
-  @@map("cryptocurrency_holdings")
-  @@index([symbol])
-}
-
-model IpoApplication {
-  // Base fields
-  id          String  @id @db.Uuid
-  base        BaseHolding @relation(fields: [id], references: [id], onDelete: Cascade)
-  
-  // IPO details
-  companyName         String
-  issueType           String  // Mainboard, SME, etc.
-  issueSize           Decimal? @db.Decimal(19, 2)
-  priceRangeMin       Decimal @db.Decimal(10, 2)
-  priceRangeMax       Decimal @db.Decimal(10, 2)
-  lotSize             Int
-  minBidQuantity      Int
-  
-  // Application details
-  appliedLots         Int
-  appliedAmount       Decimal @db.Decimal(19, 2)
-  applicationNumber   String?
-  
-  // Allotment details
-  status              String  // Applied, Allotted, Rejected, Listed
-  allottedLots        Int? @default(0)
-  allottedShares      Int? @default(0)
-  refundAmount        Decimal? @db.Decimal(19, 2)
-  
-  // Listing details
-  listingDate         DateTime?
-  listingPrice        Decimal? @db.Decimal(10, 2)
-  currentPrice        Decimal? @db.Decimal(10, 2)
-  
-  @@map("ipo_applications")
-}
-
-model ChitFund {
-  // Base fields
-  id          String  @id @db.Uuid
-  base        BaseHolding @relation(fields: [id], references: [id], onDelete: Cascade)
-  
-  // Chit details
-  chitName            String
-  chitValue           Decimal @db.Decimal(19, 2)
-  durationMonths      Int
-  monthlyInstallment  Decimal @db.Decimal(10, 2)
-  startDate           DateTime
-  endDate             DateTime
-  
-  // Bidding details
-  isBidWon            Boolean @default(false)
-  bidAmount           Decimal? @db.Decimal(19, 2)
-  bidDate             DateTime?
-  
-  // Returns
-  totalPaid           Decimal @db.Decimal(19, 2) @default(0)
-  totalReceived       Decimal @db.Decimal(19, 2) @default(0)
-  
-  @@map("chit_funds")
-}
-
-// ============================================================================
-// TRANSACTION MODEL
-// ============================================================================
-
-model Transaction {
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId   String    @db.Uuid
-  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  
-  // Transaction details
-  type          TransactionType
-  amount        Decimal   @db.Decimal(19, 4)
-  currency      String    @default("INR")
-  date          DateTime  @default(now())
-  description   String?
-  
-  // References
-  holdingId     String?   @db.Uuid
-  holding       BaseHolding? @relation(fields: [holdingId], references: [id], onDelete: Cascade)
-  
-  // Asset specific fields
-  assetType     AssetType?
-  quantity      Decimal?  @db.Decimal(36, 18) // For stocks, MF units, crypto, etc.
-  price         Decimal?  @db.Decimal(36, 18) // Price per unit
-  exchangeRate  Decimal?  @db.Decimal(19, 6)  // For foreign currency transactions
-  
-  // Account details
-  fromAccountId String?   @db.Uuid
-  toAccountId   String?   @db.Uuid
-  
-  // Tax and fees
-  tax           Decimal?  @db.Decimal(19, 4)
-  fee           Decimal?  @db.Decimal(19, 4)
-  
-  // Metadata
-  reference     String?   // External reference ID
-  notes         String?
-  
-  // For SIP/STP/SWP transactions
-  isRecurring   Boolean   @default(false)
-  frequency     Frequency?
-  
-  // For stock splits, bonuses, etc.
-  metadata      Json?     // Store additional structured data
-  
-  // Timestamps
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
-  // Indexes
-  @@index([workspaceId, date])
-  @@index([holdingId])
-  @@index([fromAccountId])
-  @@index([toAccountId])
-  @@index([assetType])
-  @@index([type])
-  
-  // Relations to specific holding types
-  stockHolding          StockHolding?          @relation(fields: [holdingId], references: [id])
-  mutualFundHolding     MutualFundHolding?     @relation(fields: [holdingId], references: [id])
-  fixedDeposit          FixedDeposit?          @relation(fields: [holdingId], references: [id])
-  realEstate            RealEstate?            @relation(fields: [holdingId], references: [id])
-  goldSilverHolding     GoldSilverHolding?     @relation(fields: [holdingId], references: [id])
-  cryptocurrencyHolding CryptocurrencyHolding? @relation(fields: [holdingId], references: [id])
-  ipoApplication        IpoApplication?        @relation(fields: [holdingId], references: [id])
-  chitFund              ChitFund?              @relation(fields: [holdingId], references: [id])
-  
-  @@map("transactions")
 }
 
 // ============================================================================

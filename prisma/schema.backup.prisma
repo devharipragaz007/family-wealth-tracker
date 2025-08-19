@@ -1,0 +1,1033 @@
+// This is your Prisma schema file for comprehensive family wealth tracking
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  extensions = [pg_trgm, pgcrypto]
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum UserRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+enum AssetType {
+  STOCK
+  US_STOCK
+  MUTUAL_FUND
+  CRYPTO
+  FIXED_DEPOSIT
+  RECURRING_DEPOSIT
+  REAL_ESTATE
+  GOLD
+  SILVER
+  OTHER
+}
+
+enum TransactionType {
+  // Common transaction types
+  BUY
+  SELL
+  DIVIDEND
+  INTEREST
+  BONUS
+  SPLIT
+  MERGER
+  TRANSFER_IN
+  TRANSFER_OUT
+  
+  // Mutual fund specific
+  SWP
+  STP
+  SIP
+  LUMPSUM
+  REDEMPTION
+  
+  // Fixed deposit specific
+  MATURITY
+  PREMATURE_WITHDRAWAL
+  
+  // Real estate specific
+  RENTAL_INCOME
+  MAINTENANCE_FEE
+  PROPERTY_TAX
+  
+  // Crypto specific
+  AIRDROP
+  STAKING_REWARD
+  FORK
+  
+  // General
+  ADJUSTMENT
+  FEE
+  TAX
+  REBALANCE
+}
+
+enum GoalStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum Frequency {
+  DAILY
+  WEEKLY
+  FORTNIGHTLY
+  MONTHLY
+  QUARTERLY
+  HALF_YEARLY
+  YEARLY
+  MATURITY
+  CUSTOM
+}
+
+enum AccountType {
+  SAVINGS
+  CURRENT
+  DEMAT
+  NRE
+  NRO
+  FIXED_DEPOSIT
+  RECURRING_DEPOSIT
+  CREDIT_CARD
+  LOAN
+  WALLET
+  OTHER
+}
+
+enum InvestmentType {
+  EQUITY
+  DEBT
+  HYBRID
+  INDEX
+  ETF
+  GOLD
+  REAL_ESTATE
+  CRYPTO
+  OTHER
+}
+
+// ============================================================================
+// USER & WORKSPACE MANAGEMENT
+// ============================================================================
+
+model User {
+  id              String    @id @default(cuid())
+  name            String?
+  email           String    @unique
+  emailVerified   DateTime?
+  image           String?
+  hashedPassword  String?
+  role            UserRole  @default(VIEWER)
+  isActive        Boolean   @default(true)
+  timezone        String?   @default("Asia/Kolkata")
+  currency        String    @default("INR")
+  locale          String?   @default("en-IN")
+  lastLoginAt     DateTime?
+  
+  // Relations
+  accounts      Account[]
+  sessions      Session[]
+  memberships   WorkspaceMember[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@map("users")
+}
+
+model Session {
+  id            String   @id @default(cuid())
+  sessionToken  String   @unique
+  userId        String
+  expires       DateTime
+  ipAddress     String?
+  userAgent     String?
+  
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier  String   @unique
+  token       String   @unique
+  expires     DateTime
+  
+  createdAt   DateTime @default(now())
+  
+  @@map("verification_tokens")
+}
+
+model Workspace {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  currency    String    @default("INR")
+  timezone    String    @default("Asia/Kolkata")
+  isDefault   Boolean   @default(false)
+  
+  // Relations
+  members       WorkspaceMember[]
+  accounts      Account[]
+  transactions  Transaction[]
+  holdings      Holding[]
+  goals         Goal[]
+  categories    Category[]
+  budgets       Budget[]
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  role        UserRole  @default(VIEWER)
+  
+  // Relations
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  invitedBy   String?
+  invitedAt   DateTime  @default(now())
+  joinedAt    DateTime?
+  
+  @@unique([workspaceId, userId])
+  @@map("workspace_members")
+}
+
+// ============================================================================
+// FINANCIAL ACCOUNTS & TRANSACTIONS
+// ============================================================================
+
+model Account {
+  id            String        @id @default(cuid())
+  name          String
+  type          AccountType
+  balance       Decimal       @default(0) @db.Decimal(20, 2)
+  currency      String        @default("INR")
+  accountNumber String?
+  holderName    String?
+  isActive      Boolean       @default(true)
+  description   String?
+  metadata      Json?         @default("{}")
+  
+  // Relations
+  workspaceId   String
+  workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  transactions  Transaction[]
+  holdings      Holding[]
+  
+  // For bank accounts
+  bankName      String?
+  branchName    String?
+  ifscCode      String?
+  
+  // For credit cards
+  cardNumber    String? @unique
+  expiryDate    DateTime?
+  creditLimit   Decimal? @db.Decimal(20, 2)
+  
+  // For loans
+  interestRate  Decimal? @db.Decimal(5, 2)
+  emiAmount     Decimal? @db.Decimal(20, 2)
+  startDate     DateTime?
+  endDate       DateTime?
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  @@index([workspaceId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Transaction {
+  id              String          @id @default(cuid())
+  date            DateTime        @default(now())
+  type            TransactionType
+  amount          Decimal         @db.Decimal(20, 2)
+  
+  // For investments
+  units           Decimal?        @db.Decimal(20, 8)
+  pricePerUnit    Decimal?        @db.Decimal(20, 2)
+  
+  // For fees and taxes
+  fee             Decimal?        @db.Decimal(20, 2)
+  tax             Decimal?        @db.Decimal(20, 2)
+  
+  currency        String          @default("INR")
+  description     String?
+  referenceNumber String?         // For bank reference numbers, transaction IDs
+  
+  // Metadata for specific transaction types
+  metadata        Json?           @default("{}")
+  
+  // Relations
+  account         Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId       String
+  
+  holding         Holding?        @relation(fields: [holdingId], references: [id], onDelete: SetNull)
+  holdingId       String?
+  
+  goal            Goal?           @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  goalId          String?
+  
+  category        Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryId      String?
+  
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId     String
+  
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String
+  
+  // For transfers between accounts
+  toAccountId     String?
+  toAccount       Account?        @relation("TransferToAccount", fields: [toAccountId], references: [id])
+  
+  // For SIP, STP, SWP
+  parentId        String?
+  parent          Transaction?    @relation("TransactionParent", fields: [parentId], references: [id])
+  children        Transaction[]   @relation("TransactionParent")
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@index([accountId])
+  @@index([holdingId])
+  @@index([categoryId])
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([date])
+  @@index([type])
+  @@map("transactions")
+}
+
+model Holding {
+  id              String          @id @default(cuid())
+  name            String
+  symbol          String?
+  isin            String?         @unique
+  type            AssetType
+  
+  // Investment details
+  investmentType  InvestmentType?
+  category        String?         // For mutual funds: equity, debt, hybrid, etc.
+  subCategory     String?         // For mutual funds: large cap, small cap, etc.
+  
+  // Quantity and value
+  quantity        Decimal         @default(0) @db.Decimal(20, 8)
+  avgBuyPrice     Decimal         @default(0) @db.Decimal(20, 2)
+  investedAmount  Decimal         @default(0) @db.Decimal(20, 2)
+  
+  // Current valuation
+  currentPrice    Decimal?        @db.Decimal(20, 2)
+  currentValue    Decimal?        @db.Decimal(20, 2)
+  profitLoss      Decimal?        @db.Decimal(20, 2)
+  profitLossPct   Decimal?        @db.Decimal(10, 4)
+  
+  // For mutual funds
+  amcName         String?         // Asset Management Company
+  nav             Decimal?        @db.Decimal(20, 4)
+  navDate         DateTime?
+  
+  // For stocks
+  exchange        String?         // NSE, BSE, NASDAQ, etc.
+  sector          String?
+  
+  // For fixed deposits
+  interestRate    Decimal?        @db.Decimal(5, 2)
+  startDate       DateTime?
+  maturityDate    DateTime?
+  
+  // For real estate
+  propertyType    String?         // Residential, Commercial, Land
+  address         String?
+  area            Decimal?        @db.Decimal(10, 2)
+  unit            String?         // sq.ft, sq.m, etc.
+  
+  // Metadata and timestamps
+  metadata        Json?           @default("{}")
+  lastSyncedAt    DateTime?
+  
+  // Relations
+  accountId       String
+  workspaceId     String
+  userId          String
+  
+  account         Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  transactions    Transaction[]
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@index([accountId])
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([type])
+  @@index([investmentType])
+  @@index([isin])
+  @@map("holdings")
+}
+
+model Category {
+  id            String    @id @default(cuid())
+  name          String
+  description   String?
+  color         String?   // Hex color code
+  icon          String?
+  isSystem      Boolean   @default(false)
+  isIncome      Boolean   @default(false)
+  isExpense     Boolean   @default(false)
+  isTransfer    Boolean   @default(false)
+  
+  // For hierarchical categories
+  parentId      String?
+  parent        Category? @relation("CategoryParent", fields: [parentId], references: [id])
+  children      Category[] @relation("CategoryParent")
+  
+  // Relations
+  workspaceId   String
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  // For tracking
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  transactions  Transaction[]
+  budgets       Budget[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  parent    Category?  @relation("CategoryParent", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryParent")
+  
+  // Relationships
+  transactions Transaction[]
+  budgetItems  BudgetItem[]
+  
+  @@unique([name, workspaceId])
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([parentId])
+  @@map("categories")
+}
+
+// ============================================================================
+// GOALS & BUDGETS
+// ============================================================================
+
+model Goal {
+  id              String          @id @default(cuid())
+  name            String
+  description     String?
+  targetAmount    Decimal         @db.Decimal(20, 2)
+  currentAmount   Decimal         @default(0) @db.Decimal(20, 2)
+  currency        String          @default("INR")
+  startDate       DateTime?
+  targetDate      DateTime
+  status          GoalStatus      @default(NOT_STARTED)
+  priority        Int             @default(2) // 1: High, 2: Medium, 3: Low
+  isCompleted     Boolean         @default(false)
+  completedAt     DateTime?
+  
+  // Relations
+  workspaceId     String
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // For linking goals to specific accounts or holdings
+  accountId       String?
+  account         Account?        @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  
+  holdingId       String?
+  holding         Holding?        @relation(fields: [holdingId], references: [id], onDelete: SetNull)
+  
+  // Transactions linked to this goal
+  transactions    Transaction[]
+  
+  // For recurring goals
+  isRecurring     Boolean         @default(false)
+  frequency       Frequency?
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([status])
+  @@index([targetDate])
+  @@map("goals")
+}
+
+model Budget {
+  id              String          @id @default(cuid())
+  name            String
+  description     String?
+  amount          Decimal         @db.Decimal(20, 2)
+  currency        String          @default("INR")
+  periodStart     DateTime
+  periodEnd       DateTime
+  isActive        Boolean         @default(true)
+  
+  // Relations
+  workspaceId     String
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // For category-based budgets
+  categoryId      String?
+  category        Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  
+  // For account-based budgets
+  accountId       String?
+  account         Account?        @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  
+  // Budget items (for envelope budgeting)
+  items           BudgetItem[]
+  
+  // Rollover settings
+  allowRollover   Boolean         @default(false)
+  rolloverLimit   Int?            // Number of periods to allow rollover
+  
+  // Tracking
+  totalSpent      Decimal         @default(0) @db.Decimal(20, 2)
+  totalIncome     Decimal         @default(0) @db.Decimal(20, 2)
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([categoryId])
+  @@index([accountId])
+  @@index([periodStart, periodEnd])
+  @@map("budgets")
+}
+
+model BudgetItem {
+  id              String          @id @default(cuid())
+  name            String
+  amount          Decimal         @db.Decimal(20, 2)
+  spent           Decimal         @default(0) @db.Decimal(20, 2)
+  
+  // Relations
+  budgetId        String
+  budget          Budget          @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  
+  categoryId      String?
+  category        Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  
+  // For tracking
+  transactions    Transaction[]
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@index([budgetId])
+  @@index([categoryId])
+  @@map("budget_items")
+}
+
+// ============================================================================
+// AUDIT LOGS & SYSTEM
+// ============================================================================
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  action      String    // e.g., "CREATE", "UPDATE", "DELETE"
+  entityType  String    // e.g., "Transaction", "Account", "Holding"
+  entityId    String
+  oldData     Json?     @default("{}")
+  newData     Json?     @default("{}")
+  ipAddress   String?
+  userAgent   String?
+  
+  // Relations
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  type        String    // e.g., "TRANSACTION_ADDED", "BILL_DUE", "GOAL_REMINDER"
+  title       String
+  message     String
+  isRead      Boolean   @default(false)
+  readAt      DateTime?
+  metadata    Json?     @default("{}")
+  
+  // Relations
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  // For linking to related entities
+  referenceId   String?
+  referenceType String?  // e.g., "Transaction", "Bill", "Goal"
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([isRead])
+  @@index([referenceType, referenceId])
+  @@map("notifications")
+}
+
+// ============================================================================
+// PRISMA CONFIGURATION
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["filterJson"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  
+  // Enable connection pooling
+  // connection_limit = 10
+  // pool_timeout = 10
+  
+  // Enable SSL in production
+  // ssl = { rejectUnauthorized = false }
+}
+model FixedDeposit {
+  id              String          @id @default(cuid())
+  accountNumber   String
+  bankName        String
+  amount          Decimal         @db.Decimal(20, 2)
+  interestRate    Decimal         @db.Decimal(6, 4)
+  startDate       DateTime
+  maturityDate    DateTime
+  isTaxSaving     Boolean         @default(false)
+  isReinvested    Boolean         @default(false)
+  interestPayout  Frequency?      // For non-cumulative FDs
+  
+  // Relations
+  accountId       String
+  workspaceId     String
+  userId          String
+  
+  transactions    Transaction[]
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  account         Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("fixed_deposits")
+}
+
+model RecurringDeposit {
+  id              String          @id @default(cuid())
+  accountNumber   String
+  bankName        String
+  amount          Decimal         @db.Decimal(20, 2)
+  installment     Decimal         @db.Decimal(20, 2)
+  interestRate    Decimal         @db.Decimal(6, 4)
+  startDate       DateTime
+  maturityDate    DateTime
+  frequency       Frequency       @default(MONTHLY)
+  isTaxSaving     Boolean         @default(false)
+  
+  // Relations
+  accountId       String
+  workspaceId     String
+  userId          String
+  
+  transactions    Transaction[]
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  account         Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("recurring_deposits")
+}
+
+// ============================================================================
+// REAL ESTATE & OTHER ASSETS
+// ============================================================================
+
+model RealEstate {
+  id              String          @id @default(cuid())
+  name            String
+  type            String          // Residential, Commercial, Land, etc.
+  address         String?
+  city            String?
+  state           String?
+  country         String          @default("India")
+  purchaseDate    DateTime
+  purchasePrice   Decimal         @db.Decimal(20, 2)
+  currentValue    Decimal?        @db.Decimal(20, 2)
+  area            Decimal?        @db.Decimal(12, 2) // in sq.ft
+  isRented        Boolean         @default(false)
+  monthlyRent     Decimal?        @db.Decimal(12, 2)
+  
+  // Relations
+  accountId       String
+  workspaceId     String
+  userId          String
+  
+  transactions    Transaction[]
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  account         Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("real_estate")
+}
+
+// ============================================================================
+// CHIT FUNDS
+// ============================================================================
+
+model ChitFund {
+  id              String          @id @default(cuid())
+  name            String
+  organizer       String
+  totalAmount     Decimal         @db.Decimal(20, 2)
+  numberOfMonths  Int
+  monthlyPayment  Decimal         @db.Decimal(20, 2)
+  startDate       DateTime
+  endDate         DateTime
+  status          String          // Active, Completed, Closed
+  
+  // Relations
+  accountId       String
+  workspaceId     String
+  userId          String
+  
+  transactions    Transaction[]
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  account         Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("chit_funds")
+}
+
+// ============================================================================
+// CURRENCY EXCHANGE RATES
+// ============================================================================
+
+model ExchangeRate {
+  id              String          @id @default(cuid())
+  fromCurrency    String          @db.Char(3)
+  toCurrency      String          @db.Char(3)
+  rate            Decimal         @db.Decimal(20, 8)
+  date            DateTime        @default(now())
+  
+  @@unique([fromCurrency, toCurrency, date])
+  @@index([date])
+  @@map("exchange_rates")
+}
+
+// ============================================================================
+// SETTINGS & PREFERENCES
+// ============================================================================
+
+model UserPreference {
+  id              String          @id @default(cuid())
+  userId          String          @unique
+  currency        String          @default("INR")
+  timezone        String          @default("Asia/Kolkata")
+  dateFormat      String          @default("dd/MM/yyyy")
+  numberFormat    String          @default("en-IN")
+  theme           String          @default("system") // light, dark, system
+  
+  // Notification preferences
+  emailNotifications  Boolean     @default(true)
+  pushNotifications   Boolean     @default(true)
+  
+  // Relations
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@map("user_preferences")
+}
+
+// ============================================================================
+// AUDIT LOG
+// ============================================================================
+
+model AuditLog {
+  id              String          @id @default(cuid())
+  action          String
+  entityType      String
+  entityId        String
+  userId          String
+  workspaceId     String
+  ipAddress       String?
+  userAgent       String?
+  metadata        Json?           @default("{}")
+  
+  // Relations
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  createdAt       DateTime        @default(now())
+  
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Budget {
+  id          String       @id @default(cuid())
+  name        String
+  description String?
+  period      BudgetPeriod
+  status      BudgetStatus @default(ACTIVE)
+  startDate   DateTime
+  endDate     DateTime
+  totalAmount Decimal      @db.Decimal(12, 2)
+  
+  userId      String
+  workspaceId String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace?  @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  
+  // Relationships
+  items BudgetItem[]
+  
+  @@map("budgets")
+}
+
+model BudgetItem {
+  id           String  @id @default(cuid())
+  name         String
+  budgetedAmount Decimal @db.Decimal(12, 2)
+  spentAmount    Decimal @default(0) @db.Decimal(12, 2)
+  
+  budgetId   String
+  categoryId String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  budget   Budget    @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  
+  @@map("budget_items")
+}
+
+// ============================================================================
+// GOALS & PLANNING
+// ============================================================================
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+  PAUSED
+  CANCELLED
+}
+
+enum GoalType {
+  SAVINGS
+  DEBT_PAYOFF
+  INVESTMENT
+  EMERGENCY_FUND
+  OTHER
+}
+
+model Goal {
+  id            String     @id @default(cuid())
+  name          String
+  description   String?
+  type          GoalType
+  status        GoalStatus @default(ACTIVE)
+  targetAmount  Decimal    @db.Decimal(12, 2)
+  currentAmount Decimal    @default(0) @db.Decimal(12, 2)
+  targetDate    DateTime?
+  
+  userId      String
+  workspaceId String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  
+  // Relationships
+  milestones GoalMilestone[]
+  
+  @@map("goals")
+}
+
+model GoalMilestone {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  targetAmount Decimal @db.Decimal(12, 2)
+  targetDate  DateTime
+  isCompleted Boolean  @default(false)
+  completedAt DateTime?
+  
+  goalId String
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  goal Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  
+  @@map("goal_milestones")
+}
+
+// ============================================================================
+// INVESTMENTS & ASSETS
+// ============================================================================
+
+enum AssetType {
+  STOCK
+  BOND
+  MUTUAL_FUND
+  ETF
+  CRYPTOCURRENCY
+  REAL_ESTATE
+  COMMODITY
+  OTHER
+}
+
+model Investment {
+  id          String    @id @default(cuid())
+  symbol      String
+  name        String
+  type        AssetType
+  quantity    Decimal   @db.Decimal(12, 6)
+  avgCost     Decimal   @db.Decimal(12, 2)
+  currentPrice Decimal? @db.Decimal(12, 2)
+  
+  accountId String
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@map("investments")
+}
+
+// ============================================================================
+// REPORTS & ANALYTICS
+// ============================================================================
+
+model Report {
+  id          String   @id @default(cuid())
+  name        String
+  type        String   // e.g., 'income_expense', 'net_worth', 'budget_analysis'
+  parameters  Json?    // Store report configuration
+  generatedAt DateTime
+  
+  userId      String
+  workspaceId String?
+  
+  createdAt DateTime @default(now())
+  
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  
+  @@map("reports")
+}
+
+// ============================================================================
+// NOTIFICATIONS & ALERTS
+// ============================================================================
+
+enum NotificationType {
+  BUDGET_EXCEEDED
+  GOAL_MILESTONE
+  LOW_BALANCE
+  BILL_DUE
+  INVESTMENT_ALERT
+  SYSTEM
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  title     String
+  message   String
+  type      NotificationType
+  isRead    Boolean          @default(false)
+  
+  userId String
+  
+  createdAt DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("notifications")
+}

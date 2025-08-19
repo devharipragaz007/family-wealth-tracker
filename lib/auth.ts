@@ -1,25 +1,26 @@
-import NextAuth, { NextAuthOptions } from "next-auth"
+import NextAuth, { type NextAuthOptions, type DefaultSession, type DefaultUser } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
-import { JWT } from "next-auth/jwt"
-import { Session } from "next-auth"
+import { PrismaAdapter } from "@auth/prisma-adapter"
+import { PrismaClient } from "@prisma/client"
+import { compare } from "bcryptjs"
+import type { Adapter } from "next-auth/adapters"
 
-// Extend the built-in session types
+const prisma = new PrismaClient()
+
 declare module "next-auth" {
-  interface Session {
+  interface Session extends DefaultSession {
     user: {
       id: string
       email: string
-      name?: string
-      image?: string
-    }
+      name?: string | null
+      image?: string | null
+      role?: string
+    } & DefaultSession["user"]
   }
-  
-  interface User {
-    id: string
-    email: string
-    name?: string
-    image?: string
+
+  interface User extends DefaultUser {
+    role?: string
   }
 }
 
@@ -27,10 +28,14 @@ declare module "next-auth/jwt" {
   interface JWT {
     id: string
     email: string
+    name?: string | null
+    role?: string
   }
 }
 
 export const authOptions: NextAuthOptions = {
+  // @ts-ignore - PrismaAdapter has a type error with the latest NextAuth version
+  adapter: PrismaAdapter(prisma) as Adapter,
   providers: [
     CredentialsProvider({
       name: "credentials",
@@ -39,25 +44,32 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          throw new Error('Email and password are required')
+        }
+
         try {
-          // This is a demo implementation
-          // In production, validate against your database
-          if (credentials?.email === "demo@example.com" && credentials?.password === "password") {
-            const user = {
-              id: "1",
-              email: credentials.email,
-              name: "Demo User",
-            }
-            
-            if (user) {
-              return {
-                id: user.id,
-                email: user.email,
-                name: user.name,
-              }
-            }
+          const user = await prisma.user.findUnique({
+            where: { email: credentials.email }
+          })
+
+          if (!user || !user.hashedPassword) {
+            throw new Error('Invalid email or password')
           }
-          return null
+
+          const isPasswordValid = await compare(credentials.password, user.hashedPassword)
+
+          if (!isPasswordValid) {
+            throw new Error('Invalid email or password')
+          }
+
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            emailVerified: user.emailVerified
+          }
         } catch (error) {
           console.error("Authentication error:", error)
           return null
@@ -73,26 +85,35 @@ export const authOptions: NextAuthOptions = {
     signIn: "/auth/signin",
   },
   session: {
-    strategy: "jwt",
+    strategy: "jwt" as const,
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id
-        token.email = user.email
+        token.id = user.id;
+        token.email = user.email ?? ''; // Ensure email is always a string
+        token.name = user.name ?? null;
+        token.role = (user as any).role ?? 'user'; // Default role to 'user' if not provided
+        // Add emailVerified to the token
+        token.emailVerified = (user as any).emailVerified;
       }
-      return token
+      return token;
     },
-    async session({ session, token }): Promise<Session> {
-      if (token) {
-        session.user.id = token.id
-        session.user.email = token.email
+    async session({ session, token }) {
+      if (session?.user) {
+        session.user.id = token.id as string;
+        session.user.email = token.email as string;
+        session.user.name = token.name as string | null;
+        (session.user as any).role = token.role as string;
+        // Add emailVerified to the session
+        (session.user as any).emailVerified = token.emailVerified;
       }
-      return session
+      return session;
     },
   },
   secret: process.env.NEXTAUTH_SECRET,
+  debug: process.env.NODE_ENV === "development",
 }
 
 const handler = NextAuth(authOptions)

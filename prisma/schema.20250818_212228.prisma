@@ -84,22 +84,6 @@ enum TransactionType {
   FEE
   TAX
   REBALANCE
-  DEPOSIT
-  WITHDRAWAL
-  CONVERSION
-  REWARD
-  REINVEST
-  EXPENSE
-  INCOME
-  DIVIDEND_REINVEST
-  CAPITAL_GAIN
-  DIVIDEND_TAX
-  TAX_REFUND
-  INTEREST_INCOME
-  INTEREST_EXPENSE
-  FEE_REBATE
-  OTHER_INCOME
-  OTHER_EXPENSE
 }
 
 enum AccountType {
@@ -477,76 +461,6 @@ model ChitFund {
   totalReceived       Decimal @db.Decimal(19, 2) @default(0)
   
   @@map("chit_funds")
-}
-
-// ============================================================================
-// TRANSACTION MODEL
-// ============================================================================
-
-model Transaction {
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId   String    @db.Uuid
-  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  
-  // Transaction details
-  type          TransactionType
-  amount        Decimal   @db.Decimal(19, 4)
-  currency      String    @default("INR")
-  date          DateTime  @default(now())
-  description   String?
-  
-  // References
-  holdingId     String?   @db.Uuid
-  holding       BaseHolding? @relation(fields: [holdingId], references: [id], onDelete: Cascade)
-  
-  // Asset specific fields
-  assetType     AssetType?
-  quantity      Decimal?  @db.Decimal(36, 18) // For stocks, MF units, crypto, etc.
-  price         Decimal?  @db.Decimal(36, 18) // Price per unit
-  exchangeRate  Decimal?  @db.Decimal(19, 6)  // For foreign currency transactions
-  
-  // Account details
-  fromAccountId String?   @db.Uuid
-  toAccountId   String?   @db.Uuid
-  
-  // Tax and fees
-  tax           Decimal?  @db.Decimal(19, 4)
-  fee           Decimal?  @db.Decimal(19, 4)
-  
-  // Metadata
-  reference     String?   // External reference ID
-  notes         String?
-  
-  // For SIP/STP/SWP transactions
-  isRecurring   Boolean   @default(false)
-  frequency     Frequency?
-  
-  // For stock splits, bonuses, etc.
-  metadata      Json?     // Store additional structured data
-  
-  // Timestamps
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
-  // Indexes
-  @@index([workspaceId, date])
-  @@index([holdingId])
-  @@index([fromAccountId])
-  @@index([toAccountId])
-  @@index([assetType])
-  @@index([type])
-  
-  // Relations to specific holding types
-  stockHolding          StockHolding?          @relation(fields: [holdingId], references: [id])
-  mutualFundHolding     MutualFundHolding?     @relation(fields: [holdingId], references: [id])
-  fixedDeposit          FixedDeposit?          @relation(fields: [holdingId], references: [id])
-  realEstate            RealEstate?            @relation(fields: [holdingId], references: [id])
-  goldSilverHolding     GoldSilverHolding?     @relation(fields: [holdingId], references: [id])
-  cryptocurrencyHolding CryptocurrencyHolding? @relation(fields: [holdingId], references: [id])
-  ipoApplication        IpoApplication?        @relation(fields: [holdingId], references: [id])
-  chitFund              ChitFund?              @relation(fields: [holdingId], references: [id])
-  
-  @@map("transactions")
 }
 
 // ============================================================================
